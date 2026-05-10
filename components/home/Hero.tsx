@@ -12,7 +12,7 @@ export default function Hero() {
       <div style={{
         position: 'absolute',
         inset: 0,
-        backgroundImage: 'url(https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=1600&q=75)',
+        backgroundImage: 'url(/images/hero/hero-bg.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         opacity: 0.25,
