@@ -54,17 +54,16 @@ export default function ProductCard({ product }: { product: Product }) {
               src={imageUrl}
               alt={title}
               style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s' }}
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              onError={e => {
+                const img = e.target as HTMLImageElement;
+                img.style.display = 'none';
+                (img.parentElement!.querySelector('.img-fallback') as HTMLElement)!.style.display = 'flex';
+              }}
             />
-          ) : (
-            <div style={{
-              width: '100%', height: '100%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--layers-text-muted)', fontSize: '13px',
-            }}>
-              No Image
-            </div>
-          )}
+          ) : null}
+          <div className="img-fallback" style={{ display: imageUrl ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'var(--layers-text-muted)', fontSize: '13px' }}>
+            No Image
+          </div>
         </div>
       </CardWrapper>
 

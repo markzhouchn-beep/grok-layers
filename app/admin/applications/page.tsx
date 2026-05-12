@@ -48,7 +48,7 @@ export default function AdminApplicationsPage() {
       const json = await res.json();
       if (json.success) {
         setCreators(prev => prev.map(c => c.id === id ? { ...c, status: 'active' } : c));
-        setActionMsg({ id, type: 'success', text: lang === 'zh' ? '已批准并发送临时密码邮件！' : 'Approved — temp password email sent!' });
+        setActionMsg({ id, type: 'success', text: lang === 'zh' ? '已批准通过！' : 'Approved!' });
         setExpandedId(null);
       } else {
         setActionMsg({ id, type: 'error', text: json.message || 'Failed' });
@@ -72,7 +72,7 @@ export default function AdminApplicationsPage() {
       const json = await res.json();
       if (json.success) {
         setCreators(prev => prev.map(c => c.id === id ? { ...c, status: 'rejected' } : c));
-        setActionMsg({ id, type: 'success', text: lang === 'zh' ? '已拒绝并发送通知邮件' : 'Rejected — notification email sent' });
+        setActionMsg({ id, type: 'success', text: lang === 'zh' ? '已拒绝' : 'Rejected' });
         setExpandedId(null);
       } else {
         setActionMsg({ id, type: 'error', text: json.message || 'Failed' });

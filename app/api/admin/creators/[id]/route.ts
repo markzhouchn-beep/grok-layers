@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { createHash, randomBytes } from 'crypto';
+import nodemailer from 'nodemailer';
 
 interface Creator {
   id: string;
@@ -28,6 +29,85 @@ function hashPassword(pw: string): string {
 function generatePassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+function createTransporter() {
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) return null;
+  return nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: { user, pass },
+  });
+}
+
+async function sendApprovalEmail(creator: Creator, tempPassword: string) {
+  const transporter = createTransporter();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://layershop.store';
+  if (!transporter) {
+    console.log('[Approval] SMTP not configured — would have sent password email to:', creator.email);
+    return;
+  }
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: creator.email,
+      subject: '【Layers】您的入驻申请已通过 · Your Application is Approved',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+          <h2 style="color: #d4623a;">🎉 恭喜！您的入驻申请已通过</h2>
+          <p>您好 <strong>${creator.name}</strong>，</p>
+          <p>您的创作者申请已通过审核，以下是您的临时登录密码：</p>
+          <div style="background: #f5f5f5; border-radius: 8px; padding: 16px 24px; margin: 20px 0; text-align: center;">
+            <span style="font-size: 24px; font-family: monospace; letter-spacing: 4px; color: #333;">${tempPassword}</span>
+          </div>
+          <p style="font-size: 13px; color: #666;">请登录后立即修改密码。</p>
+          <a href="${siteUrl}/login" style="display: inline-block; background: #d4623a; color: #fff; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 12px;">立即登录 →</a>
+          <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+          <p style="font-size: 12px; color: #999;">如果您没有申请过 Layers 创作者账号，请忽略此邮件。</p>
+        </div>
+      `,
+      text: `恭喜！您的 Layers 创作者申请已通过。临时密码: ${tempPassword} 请登录 https://layershop.store/login 修改密码。`,
+    });
+    console.log('[Approval] Password email sent to:', creator.email);
+  } catch (err) {
+    console.error('[Approval] Email send failed for', creator.email, err);
+  }
+}
+
+async function sendPasswordResetEmail(creator: Creator, newPassword: string) {
+  const transporter = createTransporter();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://layershop.store';
+  if (!transporter) {
+    console.log('[ResetPassword] SMTP not configured — would have sent reset email to:', creator.email);
+    return;
+  }
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: creator.email,
+      subject: '【Layers】密码重置 · Password Reset',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+          <h2 style="color: #d4623a;">密码已重置</h2>
+          <p>您好 <strong>${creator.name}</strong>，</p>
+          <p>您的密码已被管理员重置，新密码为：</p>
+          <div style="background: #f5f5f5; border-radius: 8px; padding: 16px 24px; margin: 20px 0; text-align: center;">
+            <span style="font-size: 24px; font-family: monospace; letter-spacing: 4px; color: #333;">${newPassword}</span>
+          </div>
+          <p style="font-size: 13px; color: #666;">请登录后立即修改密码。</p>
+          <a href="${siteUrl}/login" style="display: inline-block; background: #d4623a; color: #fff; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 12px;">立即登录 →</a>
+        </div>
+      `,
+      text: `您的 Layers 密码已重置。新密码: ${newPassword} 请登录 https://layershop.store/login 修改密码。`,
+    });
+    console.log('[ResetPassword] Email sent to:', creator.email);
+  } catch (err) {
+    console.error('[ResetPassword] Email send failed for', creator.email, err);
+  }
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -74,9 +154,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     if (action === 'approve') {
+      const newPassword = generatePassword();
+      creator.passwordHash = hashPassword(newPassword);
       creator.status = 'active';
       lines[targetIndex] = JSON.stringify(creator);
       writeFileSync(dbPath, lines.join('\n') + '\n');
+      await sendApprovalEmail(creator, newPassword);
       return NextResponse.json({ success: true, status: creator.status });
     }
 
@@ -92,6 +175,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       creator.passwordHash = hashPassword(newPassword);
       lines[targetIndex] = JSON.stringify(creator);
       writeFileSync(dbPath, lines.join('\n') + '\n');
+      await sendPasswordResetEmail(creator, newPassword);
       return NextResponse.json({ success: true, password: newPassword });
     }
 

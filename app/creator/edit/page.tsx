@@ -1,48 +1,110 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Upload, User, Image as ImageIcon } from 'lucide-react';
+import { useCreatorAuth } from '@/lib/auth/CreatorAuth';
+
+interface ProfileData {
+  name: string;
+  avatar?: string;
+  banner?: string;
+  portfolio?: string;
+  art_style?: string;
+  wechat?: string;
+}
 
 export default function CreatorEditPage() {
-  const router = useRouter();
+  const { creator } = useCreatorAuth();
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
   const [previewBanner, setPreviewBanner] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [name, setName] = useState('');
+  const [portfolio, setPortfolio] = useState('');
+  const [artStyle, setArtStyle] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load existing profile data
+  useEffect(() => {
+    if (!creator?.id) return;
+    fetch(`/api/creators/profile?id=${creator.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (j?.data) {
+          const d: ProfileData = j.data;
+          if (d.name) setName(d.name);
+          if (d.avatar) setPreviewAvatar(d.avatar);
+          if (d.banner) setPreviewBanner(d.banner);
+          if (d.portfolio) setPortfolio(d.portfolio);
+          if (d.art_style) setArtStyle(d.art_style);
+        }
+      })
+      .catch(() => {});
+  }, [creator?.id]);
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setPreviewAvatar(url);
+      setAvatarFile(file);
+      setPreviewAvatar(URL.createObjectURL(file));
     }
   };
 
   const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setPreviewBanner(url);
+      setBannerFile(file);
+      setPreviewBanner(URL.createObjectURL(file));
     }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!creator?.id) return;
     setSaving(true);
-    // In production: upload files to storage + call PATCH /api/creators/:id
-    await new Promise((r) => setTimeout(r, 800));
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setError(null);
+
+    try {
+      const body: Record<string, string> = { name };
+      if (avatarFile) body.avatar = await fileToBase64(avatarFile);
+      if (bannerFile) body.banner = await fileToBase64(bannerFile);
+      if (portfolio !== undefined) body.portfolio = portfolio;
+      if (artStyle !== undefined) body.art_style = artStyle;
+
+      const res = await fetch('/api/creators/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setSaved(true);
+        setAvatarFile(null);
+        setBannerFile(null);
+        // Update preview with returned URLs if new files were uploaded
+        if (json.data?.avatar) setPreviewAvatar(json.data.avatar);
+        if (json.data?.banner) setPreviewBanner(json.data.banner);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        const json = await res.json().catch(() => ({}));
+        setError(json.message || '保存失败');
+      }
+    } catch {
+      setError('网络错误，请重试');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto', padding: '40px 24px' }}>
       <div style={{ marginBottom: '32px' }}>
-        <Link href="/admin/creators" style={{ fontSize: '13px', color: 'var(--layers-text-muted)', textDecoration: 'none' }}>
-          ← { /* ← */ '返回创作者管理'}
+        <Link href="/dashboard" style={{ fontSize: '13px', color: 'var(--layers-text-muted)', textDecoration: 'none' }}>
+          ← 返回创作者后台
         </Link>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 700, marginTop: '12px' }}>
           编辑我的主页
@@ -144,58 +206,68 @@ export default function CreatorEditPage() {
         </div>
 
         {/* Display Name */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="name">显示名称 / Display Name</label>
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--layers-text)' }}>
+            显示名称 / Display Name *
+          </label>
           <input
-            id="name"
             type="text"
-            className="form-input"
-            placeholder="你的艺名或真名"
-            defaultValue="赵毅"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            required
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--layers-border)', borderRadius: 'var(--radius-lg)', fontSize: '14px', background: 'var(--layers-bg)', color: 'var(--layers-text)', outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
 
-        {/* Bio */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="bio">个人简介 / Bio</label>
-          <textarea
-            id="bio"
-            className="form-input"
-            rows={4}
-            placeholder="介绍一下你自己和你的艺术风格..."
-            defaultValue="抽象几何艺术家，作品曾在上海当代艺术展展出。热爱用纯粹的几何语言探索城市与自然的关系。"
+        {/* Portfolio */}
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--layers-text)' }}>
+            作品集链接 / Portfolio URL
+          </label>
+          <input
+            type="url"
+            value={portfolio}
+            onChange={e => setPortfolio(e.target.value)}
+            placeholder="https://..."
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--layers-border)', borderRadius: 'var(--radius-lg)', fontSize: '14px', background: 'var(--layers-bg)', color: 'var(--layers-text)', outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
 
-        {/* Instagram */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="instagram">Instagram</label>
+        {/* Art Style */}
+        <div>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--layers-text)' }}>
+            艺术风格 / Art Style
+          </label>
           <input
-            id="instagram"
             type="text"
-            className="form-input"
-            placeholder="your.instagram.username"
-            defaultValue="zhaoyi.art"
+            value={artStyle}
+            onChange={e => setArtStyle(e.target.value)}
+            placeholder="例如：抽象几何、水墨、插画..."
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--layers-border)', borderRadius: 'var(--radius-lg)', fontSize: '14px', background: 'var(--layers-bg)', color: 'var(--layers-text)', outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
 
-        {/*小红书 */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="rednote">小红书 / RedNote</label>
-          <input
-            id="rednote"
-            type="text"
-            className="form-input"
-            placeholder="你的小红书主页链接"
-            defaultValue="赵毅艺术"
-          />
-        </div>
+        {error && (
+          <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(220,38,38,0.08)', color: '#dc2626', fontSize: '13px' }}>
+            {error}
+          </div>
+        )}
 
         {/* Submit */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button
             type="submit"
-            className="btn btn-primary"
+            style={{
+              padding: '10px 24px',
+              background: 'var(--layers-brand)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 'var(--radius-lg)',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: saving ? 'not-allowed' : 'pointer',
+              opacity: saving ? 0.6 : 1,
+            }}
             disabled={saving}
           >
             {saving ? '保存中...' : '保存修改'}
@@ -209,4 +281,13 @@ export default function CreatorEditPage() {
       </form>
     </div>
   );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

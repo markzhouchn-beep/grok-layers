@@ -90,7 +90,7 @@ export async function PATCH(request: NextRequest) {
     const session = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8'));
     const creatorId = session.id;
     const body = await request.json();
-    const { name, avatar, banner } = body;
+    const { name, avatar, banner, portfolio, art_style } = body;
 
     const dbPath = getDbPath();
     if (!existsSync(dbPath)) {
@@ -115,6 +115,8 @@ export async function PATCH(request: NextRequest) {
 
     const creator: Creator = JSON.parse(lines[targetIndex]);
     if (name !== undefined) creator.name = name;
+    if (portfolio !== undefined) creator.portfolio = portfolio;
+    if (art_style !== undefined) creator.art_style = art_style;
 
     // Handle avatar: if base64 data-URL, save to file; if plain URL, save as-is
     if (avatar !== undefined) {

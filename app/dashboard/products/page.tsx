@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useLang } from '@/lib/i18n';
+import { useCreatorAuth } from '@/lib/auth/CreatorAuth';
 import { CheckCircle, Clock, XCircle, Plus, Image as ImageIcon, ChevronDown, ExternalLink, Trash2, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -18,6 +19,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 
 export default function CreatorProductsPage() {
   const { lang } = useLang();
+  const { creator } = useCreatorAuth();
   const [artworks, setArtworks] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,11 +29,12 @@ export default function CreatorProductsPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  const creatorId = typeof window !== 'undefined' ? localStorage.getItem('creatorId') || 'local_creator_1' : 'local_creator_1';
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/artworks?creatorId=${creatorId}`)
+    if (!creator?.id) return;
+
+    fetch(`/api/artworks?creatorId=${creator.id}`)
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (j?.data) setArtworks(j.data); })
       .catch(() => {});
@@ -39,12 +42,19 @@ export default function CreatorProductsPage() {
     fetch('/api/admin/manage/products')
       .then(r => r.ok ? r.json() : null)
       .then(j => {
-        if (j?.data) setProducts(j.data.filter((p: any) => p.creatorId === creatorId));
+        if (j?.data) setProducts(j.data.filter((p: any) => p.creatorId === creator?.id));
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [creator?.id]);
 
   const handleUpload = async (file: File, title: string, category: string) => {
+    if (!creator?.id) return;
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_SIZE) {
+      setUploadError(lang === 'zh' ? `图片不能超过 10MB，当前 ${(file.size / 1024 / 1024).toFixed(1)}MB` : `Image must be under 10MB (current: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      return;
+    }
+    setUploadError(null);
     setUploading(true);
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -52,12 +62,19 @@ export default function CreatorProductsPage() {
       const res = await fetch('/api/artworks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creatorId, title, category, artworkBase64: base64 }),
+        body: JSON.stringify({ creatorId: creator.id, title, category, artworkBase64: base64 }),
       });
       if (res.ok) {
         const json = await res.json();
         setArtworks(prev => [json.data, ...prev]);
+      } else {
+        const json = await res.json().catch(() => ({}));
+        setUploadError(json.message || (lang === 'zh' ? '上传失败，请重试' : 'Upload failed, please retry'));
       }
+      setUploading(false);
+    };
+    reader.onerror = () => {
+      setUploadError(lang === 'zh' ? '文件读取失败' : 'File read error');
       setUploading(false);
     };
     reader.readAsDataURL(file);
@@ -81,10 +98,10 @@ export default function CreatorProductsPage() {
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !creator?.id) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/artworks?id=${deleteTarget.id}&creatorId=${creatorId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/artworks?id=${deleteTarget.id}&creatorId=${creator.id}`, { method: 'DELETE' });
       if (res.ok) {
         setArtworks(prev => prev.filter(a => a.id !== deleteTarget.id));
         setProducts(prev => prev.filter(p => p.artworkId !== deleteTarget.id));
@@ -96,6 +113,14 @@ export default function CreatorProductsPage() {
   };
 
   const getVariants = (artworkId: string) => products.filter(p => p.artworkId === artworkId);
+
+  if (!creator) {
+    return (
+      <div style={{ padding: '60px', textAlign: 'center', color: 'var(--layers-text-muted)' }}>
+        {loading ? (lang === 'zh' ? '加载中...' : 'Loading...') : (lang === 'zh' ? '请先登录' : 'Please login first')}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -149,6 +174,17 @@ export default function CreatorProductsPage() {
           </div>
         </label>
       </div>
+
+      {/* Upload error */}
+      {uploadError && (
+        <div style={{
+          marginBottom: '16px', padding: '12px 16px',
+          background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)',
+          borderRadius: 'var(--radius-lg)', color: '#dc2626', fontSize: '14px',
+        }}>
+          {uploadError}
+        </div>
+      )}
 
       {/* Artwork list */}
       {loading ? (

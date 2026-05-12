@@ -39,7 +39,7 @@ export default async function CreatorPage({ params }: PageProps) {
     if (artworksRes.ok) {
       const json = await artworksRes.json();
       // Show only approved artworks for this creator
-      artworks = (json.data || []).filter((aw: any) => aw.status === 'approved');
+      artworks = (json.data || []).filter((aw: any) => aw.creatorId === id && aw.status === 'approved');
     }
   } catch {}
 

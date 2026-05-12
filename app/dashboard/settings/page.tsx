@@ -43,6 +43,8 @@ export default function DashboardSettingsPage() {
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [bannerError, setBannerError] = useState<string | null>(null);
 
   // Load creator profile data
   useEffect(() => {
@@ -71,9 +73,15 @@ export default function DashboardSettingsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      alert(lang === 'zh' ? '请选择图片文件' : 'Please select an image file');
+      setAvatarError(lang === 'zh' ? '请选择图片文件' : 'Please select an image file');
       return;
     }
+    const MAX = 5 * 1024 * 1024;
+    if (file.size > MAX) {
+      setAvatarError(lang === 'zh' ? `图片不能超过 5MB，当前 ${(file.size / 1024 / 1024).toFixed(1)}MB` : `Image must be under 5MB (current: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      return;
+    }
+    setAvatarError(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -86,9 +94,15 @@ export default function DashboardSettingsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      alert(lang === 'zh' ? '请选择图片文件' : 'Please select an image file');
+      setBannerError(lang === 'zh' ? '请选择图片文件' : 'Please select an image file');
       return;
     }
+    const MAX = 5 * 1024 * 1024;
+    if (file.size > MAX) {
+      setBannerError(lang === 'zh' ? `图片不能超过 5MB，当前 ${(file.size / 1024 / 1024).toFixed(1)}MB` : `Image must be under 5MB (current: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      return;
+    }
+    setBannerError(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -259,6 +273,11 @@ export default function DashboardSettingsPage() {
           {lang === 'zh' ? '（点击上方区域可重新选择）' : ' (click above to change)'}
         </div>
       )}
+      {avatarError && (
+        <div style={{ fontSize: '12px', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {avatarError}
+        </div>
+      )}
     </div>
   );
 
@@ -329,6 +348,11 @@ export default function DashboardSettingsPage() {
         <div style={{ fontSize: '12px', color: 'var(--layers-text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <CheckCircle size={12} color="var(--layers-success)" />
           {lang === 'zh' ? '已选择: ' : 'Selected: '}{bannerUpload.file.name}
+        </div>
+      )}
+      {bannerError && (
+        <div style={{ fontSize: '12px', color: '#dc2626' }}>
+          {bannerError}
         </div>
       )}
     </div>
